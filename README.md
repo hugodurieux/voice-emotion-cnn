@@ -13,8 +13,8 @@ pinned: false
 
 Speech emotion recognition with convolutional neural networks. RO11 course assignment, due 29/09/2026.
 
-- **Live app:** _LIEN_HF_SPACE_
-- **Repository:** _LIEN_GITHUB_
+- **Live app:** https://huggingface.co/spaces/Yugo-Duyeu/voice-emotion-cnn
+- **Repository:** https://github.com/hugodurieux/voice-emotion-cnn
 
 Record a sentence in the browser. The app shows its waveform and log-mel spectrogram and gives a prediction from two CNNs: one trained from scratch and one using transfer learning. Both were evaluated on speakers they never heard during training.
 
@@ -93,11 +93,7 @@ python app.py          # opens the app at http://127.0.0.1:7860
 
 ## Who did what
 
-| Member | Contribution |
-|---|---|
-| Hugo Durieux | _à compléter_ |
-| _Membre 2_ | _à compléter_ |
-| _Membre 3_ | _à compléter_ |
+This project was done alone by **Hugo Durieux**: data preparation, feature extraction, both CNNs, speaker-independent evaluation, web app, deployment and README.
 
 ## References
 
