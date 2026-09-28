@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Emotion CNN</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d2330; --muted: #5d6675; --card: #f3f5f8; --line: #dde2ea;
+    --accent: #c2410c; --m1: #2a6f97; --m2: #e07a5f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151c; --fg: #e8ecf2; --muted: #9aa4b2; --card: #1a2029; --line: #2a323e;
+            --accent: #fb923c; --m1: #5fa8d3; --m2: #f2a07f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  .lead { color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  button, .file { font: inherit; border-radius: 999px; padding: 10px 20px; cursor: pointer; border: 1px solid var(--line);
+                  background: var(--bg); color: var(--fg); }
+  button.rec { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  button.rec.on { animation: pulse 1s infinite; }
+  button:disabled { opacity: .5; cursor: default; }
+  @keyframes pulse { 50% { opacity: .6; } }
+  .file input { display: none; }
+  #status { color: var(--muted); font-size: .95rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  canvas { width: 100%; display: block; border-radius: 6px; background: #000; }
+  .cap { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .bar { display: grid; grid-template-columns: 90px 1fr 48px; gap: 8px; align-items: center; margin: 4px 0; font-size: .92rem; }
+  .track { background: var(--line); height: 14px; border-radius: 7px; overflow: hidden; }
+  .fill { height: 100%; width: 0; transition: width .4s; }
+  .top { font-weight: 700; }
+  .verdict { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; }
+  audio { width: 100%; margin-top: 8px; }
+  footer { color: var(--muted); font-size: .85rem; margin-top: 24px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Can a machine hear how you feel?</h1>
+  <p class="lead">Record a sentence <b>with feeling</b>: angry, sad, happy, afraid, disgusted, bored or neutral. Two CNNs, trained on the
+    German EmoDB corpus and evaluated on speakers they never heard, give their answer. Everything runs in your browser, and no audio leaves your computer.</p>
+
+  <div class="card">
+    <div class="controls">
+      <button id="rec" class="rec" disabled>● Record</button>
+      <label class="file">Upload audio<input id="file" type="file" accept="audio/*"></label>
+      <span id="status">Loading the models (≈45 MB)…</span>
+    </div>
+    <audio id="player" controls hidden></audio>
+  </div>
+
+  <div class="card">
+    <h2>Live spectrogram</h2>
+    <canvas id="live" width="900" height="160"></canvas>
+    <div class="cap">Scrolls while you record: frequency goes up, time goes right.</div>
+  </div>
+
+  <div class="card">
+    <h2>What the network sees</h2>
+    <canvas id="wave" width="900" height="90"></canvas>
+    <div class="cap">Waveform: 3-second window at 16 kHz, silence trimmed, centred.</div>
+    <canvas id="mel" width="903" height="192" style="margin-top:12px"></canvas>
+    <div class="cap">Log-mel spectrogram, 64 mel bands × 301 frames (25 ms windows every 10 ms). This is the CNN input.</div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>Model 1: CNN from scratch</h2><p class="verdict" id="v1">–</p><div id="b1"></div>
+      <div class="cap">99 k parameters · 75.4 % UAR on unseen speakers</div></div>
+    <div class="card"><h2>Model 2: ResNet-18 transfer learning</h2><p class="verdict" id="v2">–</p><div id="b2"></div>
+      <div class="cap">Frozen ImageNet backbone + new head · 61.6 % UAR on unseen speakers</div></div>
+  </div>
+
+  <footer>Trained on acted German speech from 10 speakers, so expect mistakes on other languages, microphones and spontaneous speech.
+    Chance level is 14 %. Code, method and results: <a href="https://github.com/hugodurieux/voice-emotion-cnn">GitHub repository</a>.
+    Hugo Durieux, RO11, 2026.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>
+const EMOTIONS = ["anger", "boredom", "disgust", "fear", "happiness", "sadness", "neutral"];
+const SR = 16000, N = 48000;
+const $ = id => document.getElementById(id);
+let session = null, recording = null;
+
+// magma-like colour map
+const STOPS = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,253,191]];
+function cmap(t) {
+  t = Math.min(1, Math.max(0, t)) * (STOPS.length - 1);
+  const i = Math.min(STOPS.length - 2, Math.floor(t)), f = t - i, a = STOPS[i], b = STOPS[i + 1];
+  return [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])];
+}
+
+function status(msg) { $("status").textContent = msg; }
+
+async function loadModel() {
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+  try {
+    session = await ort.InferenceSession.create("emotion.onnx", { executionProviders: ["wasm"] });
+    $("rec").disabled = false;
+    status("Ready. Press Record and say a sentence (up to 4 s).");
+  } catch (e) { status("Could not load the model: " + e.message); }
+}
+
+// ---------- audio preprocessing (same steps as features.py) ----------
+async function toMono16k(audioBuffer) {
+  const len = Math.ceil(audioBuffer.duration * SR);
+  const off = new OfflineAudioContext(1, len, SR);
+  const src = off.createBufferSource();
+  src.buffer = audioBuffer; src.connect(off.destination); src.start();
+  return (await off.startRendering()).getChannelData(0).slice();
+}
+
+function trimSilence(y, threshDb = -40) {
+  const frame = 400, n = Math.floor(y.length / frame);
+  if (n === 0) return y;
+  const e = new Float32Array(n);
+  let max = 0;
+  for (let i = 0; i < n; i++) {
+    let s = 0; for (let j = 0; j < frame; j++) { const v = y[i * frame + j]; s += v * v; }
+    e[i] = s / frame + 1e-10; if (e[i] > max) max = e[i];
+  }
+  let first = -1, last = -1;
+  for (let i = 0; i < n; i++) if (10 * Math.log10(e[i] / max) > threshDb) { if (first < 0) first = i; last = i; }
+  return first < 0 ? y : y.slice(first * frame, (last + 1) * frame);
+}
+
+function fixLength(y) {
+  const out = new Float32Array(N);
+  if (y.length >= N) { const s = Math.floor((y.length - N) / 2); out.set(y.subarray(s, s + N)); }
+  else out.set(y, Math.floor((N - y.length) / 2));
+  return out;
+}
+
+async function analyse(audioBuffer) {
+  status("Analysing…");
+  let y = await toMono16k(audioBuffer);
+  let peak = 0; for (const v of y) peak = Math.max(peak, Math.abs(v));
+  if (peak < 1e-3) { status("The recording is silent. Check your microphone."); return; }
+  for (let i = 0; i < y.length; i++) y[i] = y[i] / peak * 0.9;
+  y = fixLength(trimSilence(y));
+  drawWave(y);
+  const out = await session.run({ waveform: new ort.Tensor("float32", y, [1, N]) });
+  drawMel(out.spectrogram.data);
+  showProbs("b1", "v1", out.p_scratch.data, "--m1");
+  showProbs("b2", "v2", out.p_transfer.data, "--m2");
+  status("Done. Record again or upload another clip.");
+}
+
+// ---------- drawing ----------
+function drawWave(y) {
+  const c = $("wave"), g = c.getContext("2d"), w = c.width, h = c.height;
+  g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+  g.strokeStyle = "#5fa8d3"; g.beginPath();
+  const step = y.length / w;
+  for (let x = 0; x < w; x++) {
+    let lo = 1, hi = -1;
+    for (let j = Math.floor(x * step); j < Math.floor((x + 1) * step); j++) { lo = Math.min(lo, y[j]); hi = Math.max(hi, y[j]); }
+    g.moveTo(x + .5, h / 2 - hi * h / 2); g.lineTo(x + .5, h / 2 - lo * h / 2);
+  }
+  g.stroke();
+}
+
+function drawMel(spec) {            // spec: 64 x 301, row-major, standardised
+  const c = $("mel"), g = c.getContext("2d"), F = 64, T = 301;
+  let lo = Infinity, hi = -Infinity; for (const v of spec) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const img = g.createImageData(T, F);
+  for (let f = 0; f < F; f++) for (let t = 0; t < T; t++) {
+    const [r, gg, b] = cmap((spec[f * T + t] - lo) / (hi - lo)), k = ((F - 1 - f) * T + t) * 4;
+    img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
+  }
+  const tmp = document.createElement("canvas"); tmp.width = T; tmp.height = F;
+  tmp.getContext("2d").putImageData(img, 0, 0);
+  g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, c.width, c.height);
+}
+
+function showProbs(boxId, verdictId, p, colorVar) {
+  const order = [...p.keys()].sort((a, b) => p[b] - p[a]);
+  $(verdictId).textContent = EMOTIONS[order[0]] + " (" + Math.round(100 * p[order[0]]) + " %)";
+  const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar);
+  $(boxId).innerHTML = order.map((i, r) =>
+    `<div class="bar ${r === 0 ? "top" : ""}"><span>${EMOTIONS[i]}</span>
+     <div class="track"><div class="fill" style="background:${color}" data-w="${(100 * p[i]).toFixed(1)}"></div></div>
+     <span>${(100 * p[i]).toFixed(0)} %</span></div>`).join("");
+  requestAnimationFrame(() => $(boxId).querySelectorAll(".fill").forEach(el => el.style.width = el.dataset.w + "%"));
+}
+
+// ---------- recording with a live scrolling spectrogram ----------
+async function startRecording() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) { status("Microphone access was refused."); return; }
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0;
+  analyser.minDecibels = -100; analyser.maxDecibels = -20;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const bins = new Uint8Array(analyser.frequencyBinCount);
+  const c = $("live"), g = c.getContext("2d"), maxBin = Math.floor(8000 / (ctx.sampleRate / 2) * bins.length);
+  g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+
+  const rec = new MediaRecorder(stream), chunks = [];
+  rec.ondataavailable = e => chunks.push(e.data);
+  let raf, timer;
+  const draw = () => {
+    analyser.getByteFrequencyData(bins);
+    g.drawImage(c, -3, 0);
+    for (let yPix = 0; yPix < c.height; yPix++) {
+      const bin = Math.floor((1 - yPix / c.height) * maxBin);
+      const [r, gg, b] = cmap(bins[bin] / 255);
+      g.fillStyle = `rgb(${r|0},${gg|0},${b|0})`; g.fillRect(c.width - 3, yPix, 3, 1);
+    }
+    raf = requestAnimationFrame(draw);
+  };
+  draw();
+  rec.onstop = async () => {
+    cancelAnimationFrame(raf); clearTimeout(timer);
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(chunks, { type: rec.mimeType });
+    $("player").src = URL.createObjectURL(blob); $("player").hidden = false;
+    try { await analyse(await ctx.decodeAudioData(await blob.arrayBuffer())); }
+    catch (e) { status("Could not decode the recording: " + e.message); }
+    ctx.close();
+    $("rec").textContent = "● Record"; $("rec").classList.remove("on");
+  };
+  rec.start();
+  recording = rec;
+  timer = setTimeout(() => rec.state === "recording" && rec.stop(), 4000);
+  $("rec").textContent = "■ Stop"; $("rec").classList.add("on");
+  status("Recording… speak now (stops automatically after 4 s).");
+}
+
+$("rec").onclick = () => {
+  if (recording && recording.state === "recording") recording.stop();
+  else startRecording();
+};
+
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f || !session) return;
+  $("player").src = URL.createObjectURL(f); $("player").hidden = false;
+  const ctx = new AudioContext();
+  try { await analyse(await ctx.decodeAudioData(await f.arrayBuffer())); }
+  catch (err) { status("Could not read this file: " + err.message); }
+  ctx.close();
+};
+
+loadModel();
+</script>
+</body>
+</html>

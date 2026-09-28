@@ -1,22 +1,11 @@
----
-title: Voice Emotion CNN
-emoji: 🎙️
-colorFrom: blue
-colorTo: red
-sdk: gradio
-sdk_version: 6.28.0
-app_file: app.py
-pinned: false
----
-
 # Voice Emotion CNN
 
 Speech emotion recognition with convolutional neural networks. RO11 course assignment, due 29/09/2026.
 
-- **Live app:** https://huggingface.co/spaces/Yugo-Duyeu/voice-emotion-cnn
+- **Live app:** https://hugodurieux.github.io/voice-emotion-cnn/
 - **Repository:** https://github.com/hugodurieux/voice-emotion-cnn
 
-Record a sentence in the browser. The app shows its waveform and log-mel spectrogram and gives a prediction from two CNNs: one trained from scratch and one using transfer learning. Both were evaluated on speakers they never heard during training.
+Record a sentence in the browser. The app shows a live scrolling spectrogram while you speak, then the waveform and the log-mel spectrogram fed to the network, and a prediction from two CNNs: one trained from scratch and one using transfer learning. Both were evaluated on speakers they never heard during training.
 
 ## Data
 
@@ -70,6 +59,17 @@ Per fold (UAR), scratch / transfer: 64.1 / 51.7, 75.6 / 61.2, 79.5 / 54.1, 82.0 
 
 Full numbers and confusion matrices: `results/results.json`, `results/confusion_*.png`. Training log: `results_log.txt`.
 
+## Deployment
+
+The live app is a static page (`docs/index.html`) served by GitHub Pages. It needs no server and no paid hosting.
+- `export_onnx.py` exports the whole pipeline to a single ONNX file, `docs/emotion.onnx` (45 MB). It covers the waveform, the log-mel spectrogram, the CNN from scratch and ResNet-18 with its head. The STFT is written as a 1-D convolution with a fixed DFT basis, so it exports cleanly.
+- The script checks that the ONNX output matches the PyTorch code used for evaluation. The largest spectrogram difference is 9e-5 and the largest probability difference is 9e-6.
+- In the browser, [onnxruntime-web](https://onnxruntime.ai) runs the model. The page records with the microphone and draws a live spectrogram with the Web Audio API.
+- The page resamples to 16 kHz, peak-normalises, trims silence and centres the audio in 3 s, exactly as in `features.py`. The JavaScript preprocessing was checked to give the same output as the Python one.
+- No audio is sent anywhere.
+
+A Gradio version of the same app (`app.py`) is also included to run locally.
+
 ## Run it yourself
 
 ```bash
@@ -77,7 +77,9 @@ pip install -r requirements.txt gradio
 # download EmoDB and unzip it into data/emodb/  (so that data/emodb/wav/*.wav exists)
 curl -L -o data/emodb.zip http://emodb.bilderbar.info/download/download.zip
 python train.py        # about 20 min on a laptop CPU: cross-validation + final models in weights/
-python app.py          # opens the app at http://127.0.0.1:7860
+python export_onnx.py  # builds docs/emotion.onnx for the web page
+python -m http.server  # then open http://127.0.0.1:8000/docs/
+python app.py          # alternative: Gradio app at http://127.0.0.1:7860
 ```
 
 ## Repository
@@ -87,7 +89,9 @@ python app.py          # opens the app at http://127.0.0.1:7860
 | `features.py` | audio loading, resampling, silence trimming, log-mel spectrogram |
 | `models.py` | the two CNNs |
 | `train.py` | leave-speakers-out evaluation, figures, final training |
-| `app.py` | Gradio web app: record, see waveform + spectrogram, predictions from both models |
+| `export_onnx.py` | exports spectrogram + both CNNs to `docs/emotion.onnx` and checks it against PyTorch |
+| `docs/index.html` | deployed web app (GitHub Pages): record, live spectrogram, waveform, CNN input, predictions |
+| `app.py` | same app in Gradio, to run locally |
 | `weights/` | trained weights used by the app |
 | `results/` | metrics and figures |
 
