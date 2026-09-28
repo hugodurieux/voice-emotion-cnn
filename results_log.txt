@@ -1,0 +1,11 @@
+535 clips, 10 speakers, classes: [127  81  46  69  71  62  79]
+Computing frozen ResNet-18 embeddings...
+fold 1 (test speakers ('03', '08')): scratch UAR 0.641 | transfer UAR 0.517  [220s]
+fold 2 (test speakers ('10', '09')): scratch UAR 0.756 | transfer UAR 0.612  [447s]
+fold 3 (test speakers ('11', '13')): scratch UAR 0.795 | transfer UAR 0.541  [667s]
+fold 4 (test speakers ('12', '14')): scratch UAR 0.820 | transfer UAR 0.751  [889s]
+fold 5 (test speakers ('15', '16')): scratch UAR 0.756 | transfer UAR 0.661  [1092s]
+CNN from scratch: UAR 0.754 +/- 0.061, accuracy 0.782
+ResNet-18 transfer: UAR 0.616 +/- 0.085, accuracy 0.645
+Retraining on all 10 speakers for the app...
+Done in 1357s
