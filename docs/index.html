@@ -3,92 +3,233 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Voice Emotion CNN</title>
+<meta name="description" content="Speech emotion recognition with convolutional neural networks: a CNN trained from scratch and a ResNet-18 transfer model, evaluated on unseen speakers of EmoDB, with an in-browser demo.">
+<title>Speech Emotion Recognition with CNNs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
-  :root {
-    --bg: #ffffff; --fg: #1d2330; --muted: #5d6675; --card: #f3f5f8; --line: #dde2ea;
-    --accent: #c2410c; --m1: #2a6f97; --m2: #e07a5f;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #11151c; --fg: #e8ecf2; --muted: #9aa4b2; --card: #1a2029; --line: #2a323e;
-            --accent: #fb923c; --m1: #5fa8d3; --m2: #f2a07f; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; }
-  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
-  .lead { color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-  button, .file { font: inherit; border-radius: 999px; padding: 10px 20px; cursor: pointer; border: 1px solid var(--line);
-                  background: var(--bg); color: var(--fg); }
-  button.rec { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-  button.rec.on { animation: pulse 1s infinite; }
-  button:disabled { opacity: .5; cursor: default; }
-  @keyframes pulse { 50% { opacity: .6; } }
-  .file input { display: none; }
-  #status { color: var(--muted); font-size: .95rem; }
-  h2 { font-size: 1.05rem; margin: 0 0 8px; }
-  canvas { width: 100%; display: block; border-radius: 6px; background: #000; }
-  .cap { color: var(--muted); font-size: .85rem; margin-top: 6px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
-  .bar { display: grid; grid-template-columns: 90px 1fr 48px; gap: 8px; align-items: center; margin: 4px 0; font-size: .92rem; }
-  .track { background: var(--line); height: 14px; border-radius: 7px; overflow: hidden; }
+  body { font-family: "Noto Sans", sans-serif; background: #fff; color: #363636; }
+  .publication-title, .title, .subtitle, .publication-authors { font-family: "Google Sans", "Noto Sans", sans-serif; }
+  .publication-title { font-size: 2.6rem; line-height: 1.25; }
+  .publication-authors { font-size: 1.15rem; }
+  .publication-authors a { color: #3273dc; }
+  .publication-venue { color: #555; font-size: 1rem; margin-top: .25rem; }
+  .publication-links { margin-top: 1rem; }
+  .publication-links .button { margin: .25rem; }
+  .section { padding: 2.5rem 1.5rem; }
+  .section h2.title { margin-bottom: 1.25rem; }
+  .content p, .content li { text-align: justify; }
+  .hero.teaser { padding-bottom: 0; }
+
+  /* demo */
+  .demo-box { border: 1px solid #e5e5e5; border-radius: 6px; padding: 1.25rem; }
+  .demo-controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .demo-controls .file { margin: 0; }
+  #status { color: #7a7a7a; font-size: .95rem; }
+  canvas { width: 100%; display: block; background: #000; border-radius: 4px; }
+  .fig-cap { color: #7a7a7a; font-size: .85rem; margin: .4rem 0 1rem; }
+  .panel-title { font-family: "Google Sans", sans-serif; font-weight: 500; font-size: 1rem; margin-bottom: .5rem; color: #363636; }
+  .verdict { font-family: "Google Sans", sans-serif; font-size: 1.35rem; font-weight: 700; margin-bottom: .5rem; min-height: 1.8rem; }
+  .bar { display: grid; grid-template-columns: 88px 1fr 44px; gap: .5rem; align-items: center; margin: .2rem 0; font-size: .9rem; }
+  .track { background: #f0f0f0; height: 12px; border-radius: 2px; overflow: hidden; }
   .fill { height: 100%; width: 0; transition: width .4s; }
-  .top { font-weight: 700; }
-  .verdict { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; }
-  audio { width: 100%; margin-top: 8px; }
-  footer { color: var(--muted); font-size: .85rem; margin-top: 24px; }
-  a { color: var(--accent); }
+  .bar.top { font-weight: 600; }
+  .bar span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  audio { width: 100%; margin-top: .75rem; }
+
+  /* results */
+  .table td, .table th { text-align: center; vertical-align: middle; }
+  .table td:first-child, .table th:first-child { text-align: left; }
+  figure img { border: 1px solid #eee; }
+  pre.bib { background: #f5f5f5; font-size: .85rem; white-space: pre-wrap; }
+  .footer { padding: 2rem 1.5rem; background: #fafafa; }
+  @media (max-width: 768px) { .publication-title { font-size: 1.8rem; } }
 </style>
 </head>
 <body>
-<main>
-  <h1>Can a machine hear how you feel?</h1>
-  <p class="lead">Record a sentence <b>with feeling</b>: angry, sad, happy, afraid, disgusted, bored or neutral. Two CNNs, trained on the
-    German EmoDB corpus and evaluated on speakers they never heard, give their answer. Everything runs in your browser, and no audio leaves your computer.</p>
 
-  <div class="card">
-    <div class="controls">
-      <button id="rec" class="rec" disabled>● Record</button>
-      <label class="file">Upload audio<input id="file" type="file" accept="audio/*"></label>
-      <span id="status">Loading the models (≈45 MB)…</span>
+<section class="hero teaser">
+  <div class="hero-body">
+    <div class="container is-max-desktop has-text-centered">
+      <h1 class="title publication-title">Can a Machine Hear How You Feel?<br>Speech Emotion Recognition with CNNs</h1>
+      <div class="publication-authors">Hugo Durieux</div>
+      <div class="publication-venue">École polytechnique · RO11 course project · September 2026</div>
+      <div class="publication-links">
+        <a class="button is-dark is-rounded" href="https://github.com/hugodurieux/voice-emotion-cnn">
+          <span class="icon"><i class="fab fa-github"></i></span><span>Code</span></a>
+        <a class="button is-dark is-rounded" href="#demo">
+          <span class="icon"><i class="fas fa-microphone"></i></span><span>Live demo</span></a>
+        <a class="button is-dark is-rounded" href="http://emodb.bilderbar.info">
+          <span class="icon"><i class="fas fa-database"></i></span><span>Dataset</span></a>
+        <a class="button is-dark is-rounded" href="#results">
+          <span class="icon"><i class="fas fa-chart-bar"></i></span><span>Results</span></a>
+      </div>
     </div>
-    <audio id="player" controls hidden></audio>
   </div>
+</section>
 
-  <div class="card">
-    <h2>Live spectrogram</h2>
-    <canvas id="live" width="900" height="160"></canvas>
-    <div class="cap">Scrolls while you record: frequency goes up, time goes right.</div>
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3 has-text-centered">Abstract</h2>
+        <div class="content">
+          <p>We classify seven emotions (anger, boredom, disgust, fear, happiness, sadness and neutral) from short utterances,
+            using log-mel spectrograms as images. We compare two convolutional networks. The first is a small CNN trained from scratch
+            (99 k parameters). The second is a ResNet-18 pretrained on ImageNet, kept frozen, with a new linear head.
+            Both are evaluated on the Berlin Emotional Speech Database (EmoDB) with leave-two-speakers-out cross-validation,
+            so every score is measured on voices the model never heard.</p>
+          <p>The CNN trained from scratch reaches <b>75.4 % unweighted average recall</b>, against 61.6 % for the transfer model
+            (chance level: 14.3 %). Most errors happen between emotions with similar arousal, for example happiness and anger.
+            The full pipeline, from waveform to spectrogram to both networks, is exported to ONNX and runs entirely in the browser below.</p>
+        </div>
+      </div>
+    </div>
   </div>
+</section>
 
-  <div class="card">
-    <h2>What the network sees</h2>
-    <canvas id="wave" width="900" height="90"></canvas>
-    <div class="cap">Waveform: 3-second window at 16 kHz, silence trimmed, centred.</div>
-    <canvas id="mel" width="903" height="192" style="margin-top:12px"></canvas>
-    <div class="cap">Log-mel spectrogram, 64 mel bands × 301 frames (25 ms windows every 10 ms). This is the CNN input.</div>
+<section class="section" id="demo" style="padding-top:0">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Live demo</h2>
+    <p class="has-text-centered mb-4" style="color:#555">Record a sentence spoken with a clear emotion, or upload a WAV file.
+      Inference runs locally in your browser, and no audio is sent anywhere.</p>
+    <div class="demo-box">
+      <div class="demo-controls">
+        <button id="rec" class="button is-dark is-rounded" disabled>
+          <span class="icon"><i class="fas fa-microphone"></i></span><span id="rec-label">Record</span></button>
+        <div class="file is-rounded">
+          <label class="file-label">
+            <input id="file" class="file-input" type="file" accept="audio/*">
+            <span class="file-cta"><span class="file-icon"><i class="fas fa-upload"></i></span><span class="file-label">Upload audio</span></span>
+          </label>
+        </div>
+        <span id="status">Loading the models (45 MB)…</span>
+      </div>
+      <audio id="player" controls hidden></audio>
+
+      <div class="columns mt-4">
+        <div class="column">
+          <div class="panel-title">Live spectrogram</div>
+          <canvas id="live" width="900" height="140"></canvas>
+          <p class="fig-cap">Updated while recording (0–8 kHz).</p>
+          <div class="panel-title">Network input</div>
+          <canvas id="wave" width="900" height="80"></canvas>
+          <p class="fig-cap">Waveform: 3 s window at 16 kHz, silence trimmed and centred.</p>
+          <canvas id="mel" width="903" height="180"></canvas>
+          <p class="fig-cap">Log-mel spectrogram, 64 mel bands × 301 frames (25 ms windows, 10 ms hop).</p>
+        </div>
+      </div>
+      <div class="columns">
+        <div class="column">
+          <div class="panel-title">Model 1: CNN from scratch</div>
+          <div class="verdict" id="v1">–</div><div id="b1"></div>
+        </div>
+        <div class="column">
+          <div class="panel-title">Model 2: ResNet-18 transfer</div>
+          <div class="verdict" id="v2">–</div><div id="b2"></div>
+        </div>
+      </div>
+      <p class="fig-cap mb-0">Both models were trained on acted German speech from 10 speakers. Expect lower accuracy on other languages,
+        microphones and spontaneous speech.</p>
+    </div>
   </div>
+</section>
 
-  <div class="grid">
-    <div class="card"><h2>Model 1: CNN from scratch</h2><p class="verdict" id="v1">–</p><div id="b1"></div>
-      <div class="cap">99 k parameters · 75.4 % UAR on unseen speakers</div></div>
-    <div class="card"><h2>Model 2: ResNet-18 transfer learning</h2><p class="verdict" id="v2">–</p><div id="b2"></div>
-      <div class="cap">Frozen ImageNet backbone + new head · 61.6 % UAR on unseen speakers</div></div>
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Method</h2>
+    <div class="content">
+      <h4 class="title is-5">Data</h4>
+      <p>EmoDB contains 535 utterances in German from 10 actors (5 female, 5 male), labelled with 7 emotions.
+        The classes are imbalanced (46 disgust clips against 127 anger clips), so we use class-weighted losses and report
+        unweighted average recall (UAR), the mean of per-class recalls.</p>
+
+      <h4 class="title is-5">Features</h4>
+      <p>Each clip is resampled to 16 kHz mono, stripped of leading and trailing silence, and centred in a 3-second window.
+        We compute a log-mel spectrogram with 64 bands, 25 ms frames and a 10 ms hop, in dB, standardised per clip.
+        This gives a 64 × 301 image.</p>
+
+      <h4 class="title is-5">Models</h4>
+      <ul>
+        <li><b>CNN from scratch.</b> Four blocks of 3×3 convolution, batch normalisation, ReLU and 2×2 max-pooling
+          (16, 32, 64 and 128 channels), followed by global average pooling, dropout and a linear layer. It has 99 k parameters.
+          It is trained for 40 epochs with AdamW and a one-cycle schedule. We augment the data with random time shifts
+          and SpecAugment (one time mask and one frequency mask).</li>
+        <li><b>Transfer learning.</b> A ResNet-18 pretrained on ImageNet, frozen. The spectrogram is scaled to [0, 1],
+          replicated on three channels and normalised with ImageNet statistics. Only a dropout and linear head (3.6 k parameters)
+          is trained, on the 512-dimensional embeddings.</li>
+      </ul>
+
+      <h4 class="title is-5">Speaker-independent evaluation</h4>
+      <p>If clips are split at random, the same speaker appears in both training and test data. The network can then
+        recognise the voice rather than the emotion. We use five folds, and each fold holds out one female and one male speaker,
+        so no speaker ever appears in both splits. The deployed models are then retrained on all ten speakers.</p>
+    </div>
   </div>
+</section>
 
-  <footer>Trained on acted German speech from 10 speakers, so expect mistakes on other languages, microphones and spontaneous speech.
-    Chance level is 14 %. Code, method and results: <a href="https://github.com/hugodurieux/voice-emotion-cnn">GitHub repository</a>.
-    Hugo Durieux, RO11, 2026.</footer>
-</main>
+<section class="section" id="results" style="padding-top:0">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Results</h2>
+    <div class="table-container"><table class="table is-fullwidth is-striped">
+      <thead><tr><th>Model</th><th>Parameters trained</th><th>UAR (mean ± std, 5 folds)</th><th>Accuracy</th></tr></thead>
+      <tbody>
+        <tr><td>Chance</td><td>–</td><td>14.3 %</td><td>–</td></tr>
+        <tr><td><b>CNN from scratch</b></td><td>99 k</td><td><b>75.4 ± 6.1 %</b></td><td><b>78.2 %</b></td></tr>
+        <tr><td>ResNet-18, frozen + linear head</td><td>3.6 k</td><td>61.6 ± 8.5 %</td><td>64.5 %</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="columns">
+      <div class="column">
+        <figure class="image"><img src="static/images/confusion_scratch.png" alt="Confusion matrix of the CNN trained from scratch"></figure>
+        <p class="fig-cap has-text-centered">Confusion matrix, CNN from scratch (row-normalised, %).</p>
+      </div>
+      <div class="column">
+        <figure class="image"><img src="static/images/confusion_transfer.png" alt="Confusion matrix of the ResNet-18 transfer model"></figure>
+        <p class="fig-cap has-text-centered">Confusion matrix, ResNet-18 transfer (row-normalised, %).</p>
+      </div>
+    </div>
+
+    <div class="content">
+      <ul>
+        <li>The small CNN trained from scratch outperforms the frozen ImageNet backbone by about 14 points.
+          Features learned on natural images transfer only partly to spectrograms. A frozen backbone cannot adapt,
+          and precomputed embeddings cannot benefit from data augmentation.</li>
+        <li>Errors follow <b>arousal</b>. 34 % of happiness clips are predicted as anger (both high-energy),
+          and boredom and neutral are confused with each other (both low-energy). Sadness is the easiest class (95 % recall).</li>
+        <li>Per-fold UAR ranges from 64 % to 82 %. With only ten speakers, the choice of held-out speakers has a large effect.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <div class="container is-max-desktop content">
+    <h2 class="title is-3">References</h2>
+    <ul>
+      <li>F. Burkhardt, A. Paeschke, M. Rolfes, W. Sendlmeier, B. Weiss. <i>A database of German emotional speech.</i> Interspeech, 2005.</li>
+      <li>K. He, X. Zhang, S. Ren, J. Sun. <i>Deep residual learning for image recognition.</i> CVPR, 2016.</li>
+      <li>D. S. Park et al. <i>SpecAugment: a simple data augmentation method for automatic speech recognition.</i> Interspeech, 2019.</li>
+    </ul>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container is-max-desktop has-text-centered" style="color:#7a7a7a; font-size:.9rem">
+    Page layout adapted from the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template">Academic Project Page Template</a>
+    (derived from <a href="https://nerfies.github.io">Nerfies</a>), licensed under CC BY-SA 4.0.
+  </div>
+</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <script>
 const EMOTIONS = ["anger", "boredom", "disgust", "fear", "happiness", "sadness", "neutral"];
 const SR = 16000, N = 48000;
+const COLORS = { b1: "#2a6f97", b2: "#e07a5f" };
 const $ = id => document.getElementById(id);
 let session = null, recording = null;
 
@@ -151,8 +292,8 @@ async function analyse(audioBuffer) {
   drawWave(y);
   const out = await session.run({ waveform: new ort.Tensor("float32", y, [1, N]) });
   drawMel(out.spectrogram.data);
-  showProbs("b1", "v1", out.p_scratch.data, "--m1");
-  showProbs("b2", "v2", out.p_transfer.data, "--m2");
+  showProbs("b1", "v1", out.p_scratch.data);
+  showProbs("b2", "v2", out.p_transfer.data);
   status("Done. Record again or upload another clip.");
 }
 
@@ -183,18 +324,23 @@ function drawMel(spec) {            // spec: 64 x 301, row-major, standardised
   g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, c.width, c.height);
 }
 
-function showProbs(boxId, verdictId, p, colorVar) {
+function showProbs(boxId, verdictId, p) {
   const order = [...p.keys()].sort((a, b) => p[b] - p[a]);
   $(verdictId).textContent = EMOTIONS[order[0]] + " (" + Math.round(100 * p[order[0]]) + " %)";
-  const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar);
   $(boxId).innerHTML = order.map((i, r) =>
     `<div class="bar ${r === 0 ? "top" : ""}"><span>${EMOTIONS[i]}</span>
-     <div class="track"><div class="fill" style="background:${color}" data-w="${(100 * p[i]).toFixed(1)}"></div></div>
+     <div class="track"><div class="fill" style="background:${COLORS[boxId]}" data-w="${(100 * p[i]).toFixed(1)}"></div></div>
      <span>${(100 * p[i]).toFixed(0)} %</span></div>`).join("");
   requestAnimationFrame(() => $(boxId).querySelectorAll(".fill").forEach(el => el.style.width = el.dataset.w + "%"));
 }
 
 // ---------- recording with a live scrolling spectrogram ----------
+function setRecButton(on) {
+  $("rec-label").textContent = on ? "Stop" : "Record";
+  $("rec").classList.toggle("is-danger", on);
+  $("rec").classList.toggle("is-dark", !on);
+}
+
 async function startRecording() {
   let stream;
   try {
@@ -230,12 +376,12 @@ async function startRecording() {
     try { await analyse(await ctx.decodeAudioData(await blob.arrayBuffer())); }
     catch (e) { status("Could not decode the recording: " + e.message); }
     ctx.close();
-    $("rec").textContent = "● Record"; $("rec").classList.remove("on");
+    setRecButton(false);
   };
   rec.start();
   recording = rec;
   timer = setTimeout(() => rec.state === "recording" && rec.stop(), 4000);
-  $("rec").textContent = "■ Stop"; $("rec").classList.add("on");
+  setRecButton(true);
   status("Recording… speak now (stops automatically after 4 s).");
 }
 
